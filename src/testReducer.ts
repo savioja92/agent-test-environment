@@ -4,6 +4,8 @@ export const createInitialState = (allTickets: Ticket[]): State => ({
   allTickets,
   visibleTickets: allTickets.slice(0, 5),
   solvedCount: 0,
+  correctCount: 0,
+  wrongCount: 0,
   timeElapsedSeconds: 0,
   activeAiTrap: null,
   isTestActive: false,
@@ -26,14 +28,20 @@ export function testReducer(state: State, action: Action): State {
       };
 
     case 'SOLVE_TICKET': {
+      const targetTicket = state.visibleTickets.find(
+        (ticket) => ticket.id === action.payload.ticketId
+      );
+
+      if (!targetTicket) {
+        return state;
+      }
+
+      const isCorrect =
+        targetTicket.category === action.payload.selectedCategory;
+
       const remainingTickets = state.visibleTickets.filter(
         (ticket) => ticket.id !== action.payload.ticketId
       );
-
-      // Guard in case the ticketId wasn't found in visibleTickets
-      if (remainingTickets.length === state.visibleTickets.length) {
-        return state;
-      }
 
       const nextTicket: Ticket = {
         ...state.allTickets[state.nextTicketIndex],
@@ -47,6 +55,8 @@ export function testReducer(state: State, action: Action): State {
         ...state,
         visibleTickets: [...remainingTickets, nextTicket],
         solvedCount: state.solvedCount + 1,
+        correctCount: isCorrect ? state.correctCount + 1 : state.correctCount,
+        wrongCount: !isCorrect ? state.wrongCount + 1 : state.wrongCount,
         nextTicketIndex: nextIndex,
       };
     }

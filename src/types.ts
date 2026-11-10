@@ -1,7 +1,11 @@
+export type TicketCategory = 'helpdesk' | 'billing';
+
 export interface Ticket {
   id: string;
+  ticketNr: string;
   title: string;
   description: string;
+  category: TicketCategory;
   status: 'open' | 'solved';
 }
 
@@ -16,6 +20,8 @@ export interface State {
   allTickets: Ticket[];
   visibleTickets: Ticket[];
   solvedCount: number;
+  correctCount: number;
+  wrongCount: number;
   timeElapsedSeconds: number;
   activeAiTrap: AiTrapPayload | null;
   isTestActive: boolean;
@@ -25,6 +31,9 @@ export interface State {
 export type Action =
   | { type: 'START_TEST' }
   | { type: 'TICK_TIME' }
-  | { type: 'SOLVE_TICKET'; payload: { ticketId: string } }
+  | {
+      type: 'SOLVE_TICKET';
+      payload: { ticketId: string; selectedCategory: TicketCategory };
+    }
   | { type: 'TRIGGER_AI_MODAL'; payload: AiTrapPayload }
   | { type: 'RESOLVE_AI_MODAL' };
