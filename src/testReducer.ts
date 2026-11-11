@@ -6,6 +6,10 @@ export const createInitialState = (allTickets: Ticket[]): State => ({
   solvedCount: 0,
   correctCount: 0,
   wrongCount: 0,
+  aiTrapsAccepted: 0,
+  aiTrapsRejected: 0,
+  aiTrapsCorrect: 0,
+  aiTrapsWrong: 0,
   timeElapsedSeconds: 0,
   activeAiTrap: null,
   isTestActive: false,
@@ -29,7 +33,8 @@ export function testReducer(state: State, action: Action): State {
 
     case 'SOLVE_TICKET': {
       const targetTicket = state.visibleTickets.find(
-        (ticket) => ticket.id === action.payload.ticketId
+        (ticket) =>
+          ticket.id === action.payload.ticketId && ticket.status === 'open'
       );
 
       if (!targetTicket) {
@@ -39,12 +44,18 @@ export function testReducer(state: State, action: Action): State {
       const isCorrect =
         targetTicket.category === action.payload.selectedCategory;
 
-      const remainingTickets = state.visibleTickets.filter(
-        (ticket) => ticket.id !== action.payload.ticketId
+      // Mark the solved ticket in-place so it stays in its current slot for 1.5s
+      const updatedVisibleTickets = state.visibleTickets.map((ticket) =>
+        ticket.id === action.payload.ticketId
+          ? { ...ticket, status: 'solved' as const }
+          : ticket
       );
 
+      // Pull the next open ticket immediately so 5 open tickets remain available
+      const baseNextTicket = state.allTickets[state.nextTicketIndex];
       const nextTicket: Ticket = {
-        ...state.allTickets[state.nextTicketIndex],
+        ...baseNextTicket,
+        id: `${baseNextTicket.id}-${state.solvedCount + 5}`,
         status: 'open',
       };
 
@@ -53,11 +64,20 @@ export function testReducer(state: State, action: Action): State {
 
       return {
         ...state,
-        visibleTickets: [...remainingTickets, nextTicket],
+        visibleTickets: [...updatedVisibleTickets, nextTicket],
         solvedCount: state.solvedCount + 1,
         correctCount: isCorrect ? state.correctCount + 1 : state.correctCount,
         wrongCount: !isCorrect ? state.wrongCount + 1 : state.wrongCount,
         nextTicketIndex: nextIndex,
+      };
+    }
+
+    case 'REMOVE_SOLVED_TICKET': {
+      return {
+        ...state,
+        visibleTickets: state.visibleTickets.filter(
+          (ticket) => ticket.id !== action.payload.ticketId
+        ),
       };
     }
 
@@ -67,11 +87,30 @@ export function testReducer(state: State, action: Action): State {
         activeAiTrap: action.payload,
       };
 
-    case 'RESOLVE_AI_MODAL':
+    case 'RESOLVE_AI_MODAL': {
+      if (!state.activeAiTrap) return state;
+
+      const { decision } = action.payload;
+      const isAccepted = decision === 'accepted';
+      const isCorrect = decision === state.activeAiTrap.correctDecision;
+
       return {
         ...state,
         activeAiTrap: null,
+        aiTrapsAccepted: isAccepted
+          ? state.aiTrapsAccepted + 1
+          : state.aiTrapsAccepted,
+        aiTrapsRejected: !isAccepted
+          ? state.aiTrapsRejected + 1
+          : state.aiTrapsRejected,
+        aiTrapsCorrect: isCorrect
+          ? state.aiTrapsCorrect + 1
+          : state.aiTrapsCorrect,
+        aiTrapsWrong: !isCorrect
+          ? state.aiTrapsWrong + 1
+          : state.aiTrapsWrong,
       };
+    }
 
     default:
       return state;
