@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useAutoAnimate } from "@formkit/auto-animate/react"
-import { ArrowUpIcon, CheckCircle2Icon } from "lucide-react"
+import { ArrowUpIcon, CheckCircle2Icon, DownloadIcon } from "lucide-react"
 import {
   Card,
   CardContent,
@@ -18,15 +18,27 @@ import {
 } from "./components/ui/item"
 import { Button } from "./components/ui/button"
 import { useTestEngine } from "./useTestEngine"
+import { useTelemetry } from "./recorder/useTelemetry"
 import { VariantAModal } from "./VariantAModal"
 import { VariantBModal } from "./VariantBModal"
-import type { Ticket, TicketCategory } from "./types"
+import type { AiTrapDecision, Ticket, TicketCategory } from "./types"
 
 function App() {
   const { state, solveTicket, startTest, resolveAiModal } = useTestEngine()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [variant, setVariant] = useState<"A" | "B">("A")
   const [listRef] = useAutoAnimate<HTMLDivElement>({ duration: 300 })
+
+  const {
+    startSession,
+    logTicketOpen,
+    logTicketSolve,
+    logAiModalOpen,
+    logFrictionInteraction,
+    logDisabledButtonClick,
+    logAiModalResolve,
+    exportToCsv,
+  } = useTelemetry(variant)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -39,24 +51,73 @@ function App() {
     }
   }, [])
 
-  const handleSolve = (ticketId: string, category: TicketCategory) => {
-    solveTicket(ticketId, category)
+  // Log whenever an AI Trap modal opens
+  useEffect(() => {
+    if (state.activeAiTrap) {
+      logAiModalOpen({
+        aiTrapId: state.activeAiTrap.id,
+        triggerTimestampSeconds: state.timeElapsedSeconds,
+        severity: state.activeAiTrap.severity,
+        // If correctDecision is 'rejected', the AI suggestion is a hallucination/trap
+        isHallucination: state.activeAiTrap.correctDecision === "rejected",
+      })
+    }
+  }, [state.activeAiTrap, logAiModalOpen])
+
+  const handleStartTest = () => {
+    startSession(variant)
+    startTest()
+  }
+
+  const handleOpenTicket = (ticket: Ticket) => {
+    logTicketOpen(ticket.id)
+    setSelectedTicket(ticket)
+  }
+
+  const handleSolve = (ticket: Ticket, selectedCategory: TicketCategory) => {
+    logTicketSolve({
+      ticketId: ticket.id,
+      selectedCategory,
+      correctCategory: ticket.category,
+      elapsedSessionSeconds: state.timeElapsedSeconds,
+    })
+    solveTicket(ticket.id, selectedCategory)
     setSelectedTicket(null)
+  }
+
+  const handleResolveAi = (decision: AiTrapDecision) => {
+    logAiModalResolve(decision)
+    resolveAiModal(decision)
   }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 gap-3">
-      <div className="flex items-start gap-3">
-        <Button variant="outline" size="lg" onClick={startTest}>
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="lg" onClick={handleStartTest}>
           Start the test
         </Button>
         <Button variant="outline" size="icon" aria-label="Submit">
           <ArrowUpIcon className={state.isTestActive ? "text-green-500" : ""} />
         </Button>
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={exportToCsv}
+          className="gap-2"
+        >
+          <DownloadIcon className="w-4 h-4" />
+          Download CSV
+        </Button>
       </div>
 
-
-     
+      <div className="flex items-baseline gap-2 py-1">
+        <span className="text-sm font-medium text-muted-foreground">
+          Solved tickets:
+        </span>
+        <span className="text-2xl font-bold tracking-tight tabular-nums">
+          {state.solvedCount}
+        </span>
+      </div>
 
       <Card className="w-full max-w-md">
         <CardHeader>
@@ -67,15 +128,6 @@ function App() {
           All of the received support-request tickets are listed below. Currently showing top 5.
         </CardContent>
       </Card>
-
-       <div className="flex items-baseline gap-2 py-1">
-  <span className="text-sm font-medium text-muted-foreground">
-    Solved tickets:
-  </span>
-  <span className="text-2xl font-bold tracking-tight tabular-nums">
-    {state.solvedCount}
-  </span>
-</div>
 
       <div ref={listRef} className="w-full max-w-md flex flex-col gap-3">
         {state.visibleTickets.map((ticket) => {
@@ -108,7 +160,7 @@ function App() {
                 ) : (
                   <Button
                     variant="outline"
-                    onClick={() => setSelectedTicket(ticket)}
+                    onClick={() => handleOpenTicket(ticket)}
                   >
                     Open
                   </Button>
@@ -131,14 +183,14 @@ function App() {
                 <Button
                   variant="outline"
                   className="w-fit items-center"
-                  onClick={() => handleSolve(selectedTicket.id, "helpdesk")}
+                  onClick={() => handleSolve(selectedTicket, "helpdesk")}
                 >
                   HelpDesk
                 </Button>
 
                 <Button
                   variant="outline"
-                  onClick={() => handleSolve(selectedTicket.id, "billing")}
+                  onClick={() => handleSolve(selectedTicket, "billing")}
                 >
                   Billing
                 </Button>
@@ -156,14 +208,16 @@ function App() {
         (variant === "B" ? (
           <VariantBModal
             payload={state.activeAiTrap}
-            onAccept={() => resolveAiModal("accepted")}
-            onReject={() => resolveAiModal("rejected")}
+            onAccept={() => handleResolveAi("accepted")}
+            onReject={() => handleResolveAi("rejected")}
+            onFrictionInteraction={logFrictionInteraction}
+            onDisabledClick={logDisabledButtonClick}
           />
         ) : (
           <VariantAModal
             payload={state.activeAiTrap}
-            onAccept={() => resolveAiModal("accepted")}
-            onReject={() => resolveAiModal("rejected")}
+            onAccept={() => handleResolveAi("accepted")}
+            onReject={() => handleResolveAi("rejected")}
           />
         ))}
     </div>

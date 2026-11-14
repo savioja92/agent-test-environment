@@ -218,6 +218,10 @@ export function useTelemetry(defaultVariant: TestVariant = 'A') {
       severity,
       isHallucination,
     }: LogAiModalOpenParams) => {
+        // Prevent re-initializing if this exact AI modal is already open and being tracked
+    if (activeAiModalRef.current?.aiTrapId === aiTrapId) return;
+
+
       interruptedByAiRef.current = true;
       activeAiModalRef.current = {
         aiTrapId,

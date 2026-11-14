@@ -1,21 +1,19 @@
 import type { TelemetrySessionData } from './telemetryTypes';
 
+const DELIMITER = ';'; // Changed to semicolon for Excel compatibility
+
 const CSV_HEADERS = [
-  // Session Metadata & Global Cadence
   'sessionId',
   'variant',
   'totalTestDurationSeconds',
   'totalGeneralClicks',
   'meanTimeBetweenClicksMs',
-  // Event Identification
   'chronologicalIndex',
   'eventType',
   'loggedAtIso',
-  // Running Totals
   'totalSolved',
   'errorCatchRate',
   'falseRejectionRate',
-  // Decoy Ticket Metrics
   'ticketId',
   'selectedCategory',
   'correctCategory',
@@ -23,7 +21,6 @@ const CSV_HEADERS = [
   'ticketSolveDurationMs',
   'timeSinceLastSolveMs',
   'occurredImmediatelyAfterAi',
-  // AI Intervention Metrics
   'aiEventIndex',
   'aiTrapId',
   'triggerTimestampSeconds',
@@ -39,14 +36,15 @@ const CSV_HEADERS = [
 function escapeCsvCell(value: string | number | boolean | null | undefined): string {
   if (value === null || value === undefined) return '';
   const str = String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+  // Check for the dynamic delimiter instead of a hardcoded comma
+  if (str.includes(DELIMITER) || str.includes('"') || str.includes('\n')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
 }
 
 export function buildTelemetryCsvString(session: TelemetrySessionData): string {
-  const headerRow = CSV_HEADERS.join(',');
+  const headerRow = CSV_HEADERS.join(DELIMITER);
 
   const rows = session.events.map((event) => {
     const baseCols = [
@@ -76,7 +74,7 @@ export function buildTelemetryCsvString(session: TelemetrySessionData): string {
       const emptyAiCols = Array(10).fill('');
       return [...baseCols, ...ticketCols, ...emptyAiCols]
         .map(escapeCsvCell)
-        .join(',');
+        .join(DELIMITER);
     } else {
       const emptyTicketCols = Array(7).fill('');
       const aiCols = [
@@ -93,7 +91,7 @@ export function buildTelemetryCsvString(session: TelemetrySessionData): string {
       ];
       return [...baseCols, ...emptyTicketCols, ...aiCols]
         .map(escapeCsvCell)
-        .join(',');
+        .join(DELIMITER);
     }
   });
 
@@ -102,7 +100,9 @@ export function buildTelemetryCsvString(session: TelemetrySessionData): string {
 
 export function triggerCsvDownload(session: TelemetrySessionData): void {
   const csvContent = buildTelemetryCsvString(session);
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  
+  // \uFEFF is the Byte Order Mark (BOM) that forces Excel to read the file as UTF-8
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
 
   const timestamp = new Date()
