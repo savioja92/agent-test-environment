@@ -14,12 +14,17 @@ interface VariantBModalProps {
   payload: AiTrapPayload;
   onAccept: () => void;
   onReject: () => void;
+  // New telemetry callbacks:
+  onFrictionInteraction?: () => void;
+  onDisabledClick?: () => void;
 }
 
 export function VariantBModal({
   payload,
   onAccept,
   onReject,
+  onFrictionInteraction,
+  onDisabledClick,
 }: VariantBModalProps) {
   const [checkedItems, setCheckedItems] = useState({
     target: false,
@@ -28,7 +33,6 @@ export function VariantBModal({
   });
   const [inputValue, setInputValue] = useState('');
 
-  // Reset form state if a new trap payload is loaded
   useEffect(() => {
     setCheckedItems({ target: false, action: false, impact: false });
     setInputValue('');
@@ -38,17 +42,22 @@ export function VariantBModal({
     checkedItems.target && checkedItems.action && checkedItems.impact;
 
   const isCriticalComplete =
-    payload.expectedInput !== undefined &&
-    inputValue === payload.expectedInput;
+    payload.expectedInput !== undefined && inputValue === payload.expectedInput;
 
   const canAccept =
     payload.severity === 'moderate' ? isModerateComplete : isCriticalComplete;
 
   const handleCheckboxChange = (key: keyof typeof checkedItems) => {
+    if (onFrictionInteraction) onFrictionInteraction();
     setCheckedItems((prev) => ({
       ...prev,
       [key]: !prev[key],
     }));
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (onFrictionInteraction) onFrictionInteraction();
+    setInputValue(e.target.value);
   };
 
   return (
@@ -73,7 +82,6 @@ export function VariantBModal({
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* JSON Blast Radius Preview */}
           <div className="space-y-1.5">
             <p className="text-xs font-mono font-semibold uppercase text-muted-foreground">
               JSON Blast Radius Preview
@@ -83,13 +91,11 @@ export function VariantBModal({
             </pre>
           </div>
 
-          {/* Severity === 'moderate': 3 Checkboxes */}
           {payload.severity === 'moderate' && (
             <div className="space-y-2.5 pt-2 border-t">
               <p className="text-xs font-medium text-muted-foreground">
                 Acknowledge all impact parameters to proceed:
               </p>
-
               <label className="flex items-start gap-2.5 text-sm cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -101,7 +107,6 @@ export function VariantBModal({
                   <strong>Target:</strong> {payload.blastRadius.target}
                 </span>
               </label>
-
               <label className="flex items-start gap-2.5 text-sm cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -113,7 +118,6 @@ export function VariantBModal({
                   <strong>Action:</strong> {payload.blastRadius.action}
                 </span>
               </label>
-
               <label className="flex items-start gap-2.5 text-sm cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -128,7 +132,6 @@ export function VariantBModal({
             </div>
           )}
 
-          {/* Severity === 'critical': Exact String Match Input */}
           {payload.severity === 'critical' && (
             <div className="space-y-2 pt-2 border-t">
               <label className="block text-sm font-medium">
@@ -141,8 +144,8 @@ export function VariantBModal({
               <input
                 type="text"
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                
+                onChange={handleInputChange}
+                placeholder={payload.expectedInput}
                 className="w-full px-3 py-2 text-sm border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring font-mono"
               />
             </div>
@@ -153,15 +156,29 @@ export function VariantBModal({
           <Button variant="outline" onClick={onReject}>
             Reject / Cancel
           </Button>
-          <Button
-            variant={payload.severity === 'critical' ? 'destructive' : 'default'}
-            disabled={!canAccept}
-            onClick={onAccept}
+
+          {/* Wrapper to catch disabled clicks */}
+          <div
+            onClickCapture={() => {
+              if (!canAccept && onDisabledClick) {
+                onDisabledClick();
+              }
+            }}
           >
-            {payload.severity === 'moderate'
-              ? 'Accept AI Suggestion'
-              : 'Accept'}
-          </Button>
+            <Button
+              variant={
+                payload.severity === 'critical' ? 'destructive' : 'default'
+              }
+              disabled={!canAccept}
+              onClick={onAccept}
+              // Ensure the button itself doesn't block the click from reaching the wrapper when disabled
+              className={!canAccept ? 'pointer-events-none' : ''}
+            >
+              {payload.severity === 'moderate'
+                ? 'Accept AI Suggestion'
+                : 'Accept'}
+            </Button>
+          </div>
         </CardFooter>
       </Card>
     </div>
