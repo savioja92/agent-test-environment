@@ -1,8 +1,13 @@
-import type { Action, State, Ticket } from './types';
+import type { Action, AiTrapPayload, State, Ticket } from './types';
 
-export const createInitialState = (allTickets: Ticket[]): State => ({
+export const createInitialState = (
+  allTickets: Ticket[],
+  aiTraps: AiTrapPayload[]
+): State => ({
   allTickets,
   visibleTickets: allTickets.slice(0, 5),
+  aiTraps,
+  nextTrapIndex: 0,
   solvedCount: 0,
   correctCount: 0,
   wrongCount: 0,
@@ -10,25 +15,18 @@ export const createInitialState = (allTickets: Ticket[]): State => ({
   aiTrapsRejected: 0,
   aiTrapsCorrect: 0,
   aiTrapsWrong: 0,
-  timeElapsedSeconds: 0,
   activeAiTrap: null,
   isTestActive: false,
-  nextTicketIndex: 5,
+  isTestCompleted: false,
+  nextTicketIndex: 5 % allTickets.length,
 });
 
 export function testReducer(state: State, action: Action): State {
   switch (action.type) {
     case 'START_TEST':
       return {
-        ...state,
+        ...createInitialState(state.allTickets, state.aiTraps),
         isTestActive: true,
-      };
-
-    case 'TICK_TIME':
-      if (!state.isTestActive) return state;
-      return {
-        ...state,
-        timeElapsedSeconds: state.timeElapsedSeconds + 1,
       };
 
     case 'SOLVE_TICKET': {
@@ -44,14 +42,12 @@ export function testReducer(state: State, action: Action): State {
       const isCorrect =
         targetTicket.category === action.payload.selectedCategory;
 
-      // Mark the solved ticket in-place so it stays in its current slot for 1.5s
       const updatedVisibleTickets = state.visibleTickets.map((ticket) =>
         ticket.id === action.payload.ticketId
           ? { ...ticket, status: 'solved' as const }
           : ticket
       );
 
-      // Pull the next open ticket immediately so 5 open tickets remain available
       const baseNextTicket = state.allTickets[state.nextTicketIndex];
       const nextTicket: Ticket = {
         ...baseNextTicket,
@@ -59,16 +55,37 @@ export function testReducer(state: State, action: Action): State {
         status: 'open',
       };
 
-      const nextIndex =
-        state.nextTicketIndex + 1 > 19 ? 0 : state.nextTicketIndex + 1;
+      const nextIndex = (state.nextTicketIndex + 1) % state.allTickets.length;
+      const newSolvedCount = state.solvedCount + 1;
+
+      // Trigger the next scheduled AI modal when solvedCount reaches its threshold
+      let nextActiveAiTrap = state.activeAiTrap;
+      let updatedNextTrapIndex = state.nextTrapIndex;
+
+      if (
+        state.isTestActive &&
+        !state.isTestCompleted &&
+        state.activeAiTrap === null
+      ) {
+        const scheduledTrap = state.aiTraps[state.nextTrapIndex];
+        if (
+          scheduledTrap &&
+          newSolvedCount >= scheduledTrap.triggerAtSolvedCount
+        ) {
+          nextActiveAiTrap = scheduledTrap;
+          updatedNextTrapIndex = state.nextTrapIndex + 1;
+        }
+      }
 
       return {
         ...state,
         visibleTickets: [...updatedVisibleTickets, nextTicket],
-        solvedCount: state.solvedCount + 1,
+        solvedCount: newSolvedCount,
         correctCount: isCorrect ? state.correctCount + 1 : state.correctCount,
         wrongCount: !isCorrect ? state.wrongCount + 1 : state.wrongCount,
         nextTicketIndex: nextIndex,
+        activeAiTrap: nextActiveAiTrap,
+        nextTrapIndex: updatedNextTrapIndex,
       };
     }
 
@@ -81,12 +98,6 @@ export function testReducer(state: State, action: Action): State {
       };
     }
 
-    case 'TRIGGER_AI_MODAL':
-      return {
-        ...state,
-        activeAiTrap: action.payload,
-      };
-
     case 'RESOLVE_AI_MODAL': {
       if (!state.activeAiTrap) return state;
 
@@ -94,9 +105,13 @@ export function testReducer(state: State, action: Action): State {
       const isAccepted = decision === 'accepted';
       const isCorrect = decision === state.activeAiTrap.correctDecision;
 
+      const isLastModalResolved = state.nextTrapIndex >= state.aiTraps.length;
+
       return {
         ...state,
         activeAiTrap: null,
+        isTestCompleted: isLastModalResolved,
+        isTestActive: isLastModalResolved ? false : state.isTestActive,
         aiTrapsAccepted: isAccepted
           ? state.aiTrapsAccepted + 1
           : state.aiTrapsAccepted,

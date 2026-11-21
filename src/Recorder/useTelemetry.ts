@@ -212,29 +212,34 @@ export function useTelemetry(defaultVariant: TestVariant = 'A') {
   );
 
   const logAiModalOpen = useCallback(
-    ({
-      aiTrapId,
-      triggerTimestampSeconds,
-      severity,
-      isHallucination,
-    }: LogAiModalOpenParams) => {
-        // Prevent re-initializing if this exact AI modal is already open and being tracked
+  ({
+    aiTrapId,
+    triggerTimestampSeconds,
+    severity,
+    isHallucination,
+  }: LogAiModalOpenParams) => {
     if (activeAiModalRef.current?.aiTrapId === aiTrapId) return;
 
+    const now = performance.now();
+    const computedTriggerSeconds =
+      triggerTimestampSeconds ??
+      (sessionStartPerfMsRef.current !== null
+        ? Math.round((now - sessionStartPerfMsRef.current) / 1000)
+        : 0);
 
-      interruptedByAiRef.current = true;
-      activeAiModalRef.current = {
-        aiTrapId,
-        triggerTimestampSeconds,
-        severity,
-        isHallucination,
-        openedAtPerfMs: performance.now(),
-        timeToFirstFrictionActionMs: null,
-        muscleMemoryClicks: 0,
-      };
-    },
-    []
-  );
+    interruptedByAiRef.current = true;
+    activeAiModalRef.current = {
+      aiTrapId,
+      triggerTimestampSeconds: computedTriggerSeconds,
+      severity,
+      isHallucination,
+      openedAtPerfMs: now,
+      timeToFirstFrictionActionMs: null,
+      muscleMemoryClicks: 0,
+    };
+  },
+  []
+);
 
   const logFrictionInteraction = useCallback(() => {
     const activeModal = activeAiModalRef.current;

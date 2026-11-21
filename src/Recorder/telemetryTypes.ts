@@ -76,7 +76,7 @@ export interface TelemetrySessionData {
 
 export interface LogAiModalOpenParams {
   aiTrapId: string;
-  triggerTimestampSeconds: number;
+  triggerTimestampSeconds?: number;
   severity: 'moderate' | 'critical';
   isHallucination: boolean;
 }
